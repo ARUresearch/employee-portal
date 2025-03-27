@@ -1,0 +1,111 @@
+// Replace this in your existing code
+const API_BASE_URL = 'http://localhost:5000/api';
+let authToken = null;
+
+// Helper function for API calls
+async function makeApiCall(endpoint, method = 'GET', body = null, requiresAuth = false) {
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (requiresAuth && authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    const config = {
+        method,
+        headers
+    };
+    
+    if (body) {
+        config.body = JSON.stringify(body);
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Something went wrong');
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
+}
+
+// Modified markWorkStart function
+async function markWorkStart() {
+    const selectedName = document.getElementById("employeeName").value;
+    const confirmName = document.getElementById("confirmName").value;
+
+    if (selectedName !== confirmName) {
+        showErrorMessage("taskErrorMessage", "Employee name does not match. Please confirm your name.");
+        return;
+    }
+
+    try {
+        const response = await makeApiCall('/employees/start-work', 'POST', { name: selectedName, confirmName });
+        showStatusMessage("taskStatusMessage", response.message);
+    } catch (error) {
+        showErrorMessage("taskErrorMessage", error.message);
+    }
+}
+
+// Modified adminLogin function
+async function adminLogin() {
+    const password = document.getElementById("adminPassword").value;
+    
+    try {
+        const response = await makeApiCall('/admin/login', 'POST', { password });
+        authToken = response.token;
+        document.getElementById("adminLoginSection").style.display = "none";
+        document.getElementById("adminControls").classList.add("active");
+        document.getElementById("adminPassword").value = "";
+        showStatusMessage("adminStatusMessage", "Admin login successful!");
+    } catch (error) {
+        showErrorMessage("adminErrorMessage", error.message);
+    }
+}
+
+// Modified loadSalaryDashboard function
+async function loadSalaryDashboard(filter = 'all') {
+    const salaryTableBody = document.querySelector("#salaryTable tbody");
+    salaryTableBody.innerHTML = "";
+    
+    try {
+        const records = await makeApiCall(`/employees/salary-records?filter=${filter}`);
+        
+        if (records.length === 0) {
+            const row = document.createElement("tr");
+            row.innerHTML = `<td colspan="9" style="text-align: center;">No records found</td>`;
+            salaryTableBody.appendChild(row);
+            return;
+        }
+
+        records.forEach(employee => {
+            const totalSalary = (employee.dailyEarnings || 0) + (employee.incentives || 0) - (employee.advances || 0);
+            
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${employee.name}</td>
+                <td>${employee.date}</td>
+                <td>${employee.workStart || "-"}</td>
+                <td>${employee.workEnd || "-"}</td>
+                <td>${employee.tasksCompleted || "-"}</td>
+                <td>${employee.dailyEarnings ? "₹" + employee.dailyEarnings : "-"}</td>
+                <td>${employee.incentives ? "₹" + employee.incentives : "-"}</td>
+                <td>${employee.advances ? "₹" + employee.advances : "-"}</td>
+                <td>${totalSalary ? "₹" + totalSalary : "-"}</td>
+            `;
+            salaryTableBody.appendChild(row);
+        });
+    } catch (error) {
+        console.error("Error loading salary dashboard:", error);
+        const row = document.createElement("tr");
+        row.innerHTML = `<td colspan="9" style="text-align: center; color: red;">Error loading data</td>`;
+        salaryTableBody.appendChild(row);
+    }
+}
